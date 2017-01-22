@@ -3,7 +3,12 @@
 export GOPATH=`pwd`
 export GOBIN=$GOPATH/bin
 
-go get
+# download and install packages and dependencies
+# go get
+
+# Download, then install packages.
+go get -d
+go install
 
 go fmt
 
