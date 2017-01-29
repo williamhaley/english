@@ -2,7 +2,7 @@ package main
 
 import (
 	"github.com/gorilla/mux"
-	"github.com/williamhaley/negroni"
+	"github.com/urfave/negroni"
 
 	"./controller"
 	"./middleware"
@@ -18,8 +18,10 @@ func NewRouter() *negroni.Negroni {
 
 	wordController := controller.NewWordController()
 
-	// TODO WFH Why does this only work on mux.NewRouter()? Why can't it
-	// be a subrouter of `router`? That feels weird. Two routers. Why?
+	// There isn't a huge benefit to using apiRouter beyond reducing some code
+	// by sharing the `/api` namespace here. We could also pass `apiRouter` to
+	// `negroni.Wrap()` in each of the route groupings below to make things
+	// consistent. However, I do not find the code as easy to read if we do that
 	apiRouter := mux.NewRouter().PathPrefix("/api").Subrouter()
 
 	apiRouterV1 := apiRouter.PathPrefix("/v1").Subrouter()
@@ -37,30 +39,29 @@ func NewRouter() *negroni.Negroni {
 	apiRouterV3.HandleFunc("/words", wordController.Index).Methods("GET")
 	apiRouterV3.HandleFunc("/words/{wordId}", wordController.Show).Methods("GET")
 
-	router.PathPrefix("/api/v1").Handler(negroni.New(
+	apiMiddleware := negroni.New(
 		middleware.NewAPIMiddleware("common api middleware"),
 		middleware.NewAPIMiddleware("common auth middleware"),
+	)
+
+	router.PathPrefix("/api/v1").Handler(apiMiddleware.With(
 		middleware.NewAPIMiddleware("specific to v1"),
-		negroni.Wrap(apiRouter),
+		negroni.Wrap(apiRouterV1),
 	))
 
-	router.PathPrefix("/api/v2").Handler(negroni.New(
-		middleware.NewAPIMiddleware("common api middleware"),
-		middleware.NewAPIMiddleware("common auth middleware"),
+	router.PathPrefix("/api/v2").Handler(apiMiddleware.With(
 		middleware.NewAPIMiddleware("shared with v1 & v2"),
 		middleware.NewAPIMiddleware("specific to v2"),
 		middleware.NewAPIMiddleware("common output middleware"),
-		negroni.Wrap(apiRouter),
+		negroni.Wrap(apiRouterV2),
 	))
 
-	router.PathPrefix("/api/v3").Handler(negroni.New(
-		middleware.NewAPIMiddleware("common api middleware"),
-		middleware.NewAPIMiddleware("common auth middleware"),
+	router.PathPrefix("/api/v3").Handler(apiMiddleware.With(
 		middleware.NewAPIMiddleware("shim for some reason"),
 		middleware.NewAPIMiddleware("shared with v1 & v2"),
 		middleware.NewAPIMiddleware("specific to v3"),
 		middleware.NewAPIMiddleware("common output middleware"),
-		negroni.Wrap(apiRouter),
+		negroni.Wrap(apiRouterV3),
 	))
 
 	// All of this middleware runs before any of the per-route middleware. Note
