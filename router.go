@@ -2,13 +2,15 @@ package main
 
 import (
 	"github.com/gorilla/mux"
+	log "github.com/sirupsen/logrus"
 	"github.com/urfave/negroni"
 
 	"./controller"
+	"./database"
 	"./middleware"
 
-	"fmt"
 	"net/http"
+	"text/template"
 )
 
 func NewRouter() *negroni.Negroni {
@@ -16,7 +18,12 @@ func NewRouter() *negroni.Negroni {
 
 	router.HandleFunc("/", Index).Methods("GET")
 
-	wordController := controller.NewWordController()
+	database, err := database.NewDatabase()
+	if err != nil {
+		log.Panic(err)
+	}
+	log.Info("Database connection established")
+	wordController := controller.NewWordController(database)
 
 	// There isn't a huge benefit to using apiRouter beyond reducing some code
 	// by sharing the `/api` namespace here. We could also pass `apiRouter` to
@@ -37,6 +44,7 @@ func NewRouter() *negroni.Negroni {
 	apiRouterV3 := apiRouter.PathPrefix("/v3").Subrouter()
 	apiRouterV3.HandleFunc("/words", wordController.Create).Methods("POST")
 	apiRouterV3.HandleFunc("/words", wordController.Index).Methods("GET")
+	apiRouterV3.HandleFunc("/words/non-verbs", wordController.NonVerbs).Methods("GET")
 	apiRouterV3.HandleFunc("/words/{wordId}", wordController.Show).Methods("GET")
 
 	apiMiddleware := negroni.New(
@@ -64,6 +72,8 @@ func NewRouter() *negroni.Negroni {
 		negroni.Wrap(apiRouterV3),
 	))
 
+	router.PathPrefix("/public/").Handler(http.StripPrefix("/public/", http.FileServer(http.Dir("public"))))
+
 	// All of this middleware runs before any of the per-route middleware. Note
 	// that it may look confusing, because the logger prints some info, then
 	// passes to the next middleware, and after *all* middleware has run, prints
@@ -78,5 +88,6 @@ func NewRouter() *negroni.Negroni {
 }
 
 func Index(rw http.ResponseWriter, r *http.Request) {
-	fmt.Fprintln(rw, "Welcome!")
+	t, _ := template.ParseFiles("index.html")
+	t.Execute(rw, nil)
 }

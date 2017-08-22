@@ -6,9 +6,11 @@ import (
 	"net/http"
 	"strconv"
 
+	"../database"
 	"../model"
 
 	"github.com/gorilla/mux"
+	log "github.com/sirupsen/logrus"
 )
 
 var words []model.Word = []model.Word{}
@@ -17,23 +19,21 @@ type WordController interface {
 	Show(rw http.ResponseWriter, r *http.Request)
 	Create(rw http.ResponseWriter, r *http.Request)
 	Index(rw http.ResponseWriter, r *http.Request)
+	NonVerbs(rw http.ResponseWriter, r *http.Request)
 }
-type wordController struct{}
+type wordController struct {
+	db database.Database
+}
 
-func NewWordController() WordController {
-	return &wordController{}
+func NewWordController(db database.Database) WordController {
+	return &wordController{db: db}
 }
 
 func (c *wordController) Create(rw http.ResponseWriter, r *http.Request) {
-	var properties map[string]interface{}
+	var word model.Word
 	decoder := json.NewDecoder(r.Body)
-	if err := decoder.Decode(&properties); err != nil {
-		Write(rw, http.StatusBadRequest, err)
-		return
-	}
-
-	word, err := model.NewWord(properties)
-	if err != nil {
+	if err := decoder.Decode(&word); err != nil {
+		log.WithError(err).Error("Error decoding parameters for new word")
 		Write(rw, http.StatusBadRequest, err)
 		return
 	}
@@ -44,6 +44,20 @@ func (c *wordController) Create(rw http.ResponseWriter, r *http.Request) {
 }
 
 func (c *wordController) Index(rw http.ResponseWriter, r *http.Request) {
+	words, err := c.db.GetAllWords()
+	if err != nil {
+		log.WithError(err).Error("Error retrieving words")
+	}
+
+	Write(rw, http.StatusOK, words)
+}
+
+func (c *wordController) NonVerbs(rw http.ResponseWriter, r *http.Request) {
+	words, err := c.db.GetNonVerbs()
+	if err != nil {
+		log.WithError(err).Error("Error retrieving non-verbs")
+	}
+
 	Write(rw, http.StatusOK, words)
 }
 
